@@ -1,23 +1,16 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use std::sync::Mutex;
 
-#[get("/hello")]
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
-}
+mod api;
 
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
-}
+use crate::api::api::scoped_config;
+
+
+
+
 
 async fn manual_hello() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
-}
-
-#[get("/home")]
-async fn home() -> impl Responder {
-    HttpResponse::Ok().body("heya fucko")
 }
 
 async fn about() -> impl Responder {
@@ -46,8 +39,6 @@ async fn indextwo(data: web::Data<AppStateWithCounter>) -> String {
     format!("Request number: {counter}") // <- response with count
 }
 
-
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
 
@@ -62,14 +53,12 @@ async fn main() -> std::io::Result<()> {
             // }))
             .app_data(counter.clone()) // <- register the created data
             .route("/", web::get().to(indextwo))
-            .service(hello)
-            .service(echo)
             .route("/hey", web::get().to(manual_hello))
-            .service(home)
             .service(
                 web::scope("/api")
                 .route("/about", web::get().to(about)))
             .service(index)
+            .service(web::scope("/lol").configure(scoped_config))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
