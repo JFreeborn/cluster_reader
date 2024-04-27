@@ -1,21 +1,8 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{get, web, App, HttpServer};
 use std::sync::Mutex;
 
 mod api;
-
 use crate::api::api::scoped_config;
-
-
-
-
-
-async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
-}
-
-async fn about() -> impl Responder {
-    HttpResponse::Ok().body("here is the about section")
-}
 
 // This struct represents state
 struct AppState {
@@ -53,13 +40,10 @@ async fn main() -> std::io::Result<()> {
             // }))
             .app_data(counter.clone()) // <- register the created data
             .route("/", web::get().to(indextwo))
-            .route("/hey", web::get().to(manual_hello))
-            .service(
-                web::scope("/api")
-                .route("/about", web::get().to(about)))
             .service(index)
             .service(web::scope("/lol").configure(scoped_config))
     })
+    .workers(2)
     .bind(("127.0.0.1", 8080))?
     .run()
     .await
