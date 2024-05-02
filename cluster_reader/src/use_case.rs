@@ -329,23 +329,23 @@ pub mod use_case {
     #[derive(Deserialize)]
     #[derive(Serialize)] 
     pub struct Namespaces {
-        namesapces: Vec<String>
+        namespaces: Vec<String>
     }
 
     pub async fn get_namespaces() -> Result<Namespaces, Error> {
 
         let mut namespaces = Namespaces {
-            namesapces: Vec::new()
+            namespaces: Vec::new()
         };
 
-        let get_namesapces_command = Command::new("kubectl")
+        let get_namespaces_command = Command::new("kubectl")
             .arg("get")
             .arg("namespaces")
             .arg("--output=name")
             .stdout(Stdio::piped())
             .spawn()?;
 
-        if let Some(stdout) = get_namesapces_command.stdout {
+        if let Some(stdout) = get_namespaces_command.stdout {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 let line = line?;
@@ -353,7 +353,7 @@ pub mod use_case {
                 let parts: Vec<&str> = line.split('/').collect();
                 
                 if let Some(item_two) = parts.get(1) {
-                    namespaces.namesapces.push(String::from(item_two.to_string()));
+                    namespaces.namespaces.push(String::from(item_two.to_string()));
                 } else {
                     println!("The string doesn't have a second part.");
                 }
@@ -362,7 +362,7 @@ pub mod use_case {
             return Err(Error::new(ErrorKind::Other, "Failed to capture stdout from get namespace command"));
         }
 
-        namespaces.namesapces.sort();
+        namespaces.namespaces.sort();
 
         Ok(namespaces)
     }
@@ -399,7 +399,7 @@ pub mod use_case {
             all_namespace_details: Vec::new()
         };
 
-        for namespace in &namespaces_list.namesapces{
+        for namespace in &namespaces_list.namespaces{
             
             let mut namespace_details = NamespaceDetails {
                 namespace: String::from(namespace),

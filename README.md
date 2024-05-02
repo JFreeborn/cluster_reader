@@ -12,5 +12,7 @@ This is the start to the cluster reader service that will serve up cluster info 
 
 * remove async from processor functions, only external calls
 
+* Break apart single usecase to match api calls
+
 * Create error types
 
