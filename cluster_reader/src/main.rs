@@ -23,7 +23,7 @@ async fn main() -> std::io::Result<()> {
             });
 
         App::new()
-            .service(web::scope("/lol")
+            .service(web::scope("/api/v1")
                 .app_data(json_config)
                 .configure(scoped_config))
     })
