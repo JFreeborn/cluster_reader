@@ -313,13 +313,15 @@ pub mod use_case {
 /**********************************************************************************************************/
 /**********************************************************************************************************/
 
-    pub async fn get_namespace_details_handler() -> Result<AllNamespaceDetails, Error> {
+    pub async fn get_namespace_details_handler() -> Result<TotalDeploymentDetails, Error> {
         
         let z = get_namespaces().await?;
         
         let x = get_deployments_and_details_by_namespace(&z).await?;
 
-        Ok(x)
+        let c = process_deployment_details_handler(&x).await?;
+
+        Ok(c)
     }
 
 
@@ -459,10 +461,6 @@ pub mod use_case {
                     } else {
                         return Err(Error::new(ErrorKind::Other, "Failed to capture stdout from node description"));
                     }
-
-                    println!("{}", depolyment_details.details);
-
-                    // Then add to the NamespaceDetails
                     namespace_details.deployment_details.push(depolyment_details);
                 }
             } else {
@@ -473,4 +471,276 @@ pub mod use_case {
         
         Ok(all_namespace_details)
     }
+
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)] 
+    pub struct DeploymentDetailGroups {
+        deployment_name: String,
+        api_version: String,
+        replicas: String,
+        image: String,
+        kind: String,
+        resources: String,
+        //metadata: String,
+        //spec: String,
+        //status: String,
+    }
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)]
+    pub struct DeploymentDetailsPerNamespace {
+        namespace: String,
+        deployment_details: Vec<DeploymentDetailGroups>,
+    }
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)]
+    pub struct TotalDeploymentDetails {
+        total_details: Vec<DeploymentDetailsPerNamespace>,
+    }
+
+    pub async fn process_deployment_details_handler(deployment_details: &AllNamespaceDetails) -> Result<TotalDeploymentDetails, Error> {
+        
+        let mut total_deployment_details = TotalDeploymentDetails {
+            total_details: Vec::new()
+        };
+
+        for namespace_details in &deployment_details.all_namespace_details {
+            
+            let mut depolyment_details_per_namespace = DeploymentDetailsPerNamespace {
+                namespace: String::from(&namespace_details.namespace),
+                deployment_details: Vec::new()
+            };
+
+            for item in &namespace_details.deployment_details {
+                
+                let mut depoloyment_detail_groups = DeploymentDetailGroups {
+                    deployment_name: String::from(&item.deployment),
+                    api_version: String::new(),
+                    replicas: String::new(),
+                    image: String::new(),
+                    kind: String::new(),
+                    resources: String::new(),
+                    //metadata: String::new(),
+                    //spec: String::new(),
+                    //status: String::new()
+                };
+
+                // process the deployment via regex and put the parts into the struct.
+                const REGEX_PATTERN: &str = r"(^apiVersion\:\s)(.*)\n(kind\:\s)(Deployment)\n(metadata\:)((.*\n)+)(spec\:)((.*\n)+)(status\:)((.*\n)+.*)";
+
+                let regex_pattern = Regex::new(REGEX_PATTERN).unwrap();
+
+                if let Some(captures) = regex_pattern.captures(&item.details) {
+                    if let (
+                        Some(deployment_api_version),
+                        Some(deployment_kind),
+                        //Some(deployment_metadata),
+                        Some(deployment_spec),
+                        //Some(deployment_status),
+                    ) = (
+                        captures.get(2),
+                        captures.get(4),
+                        //captures.get(6),
+                        captures.get(9),
+                        //captures.get(12),
+                    ) {
+                        depoloyment_detail_groups.api_version.push_str(deployment_api_version.as_str());
+                        depoloyment_detail_groups.kind.push_str(deployment_kind.as_str());
+
+                        let replica_result = get_replicas_from_spec(String::from(deployment_spec.as_str()))?;
+                        depoloyment_detail_groups.replicas.push_str(&replica_result);
+
+                        let image_result = get_image_from_spec(String::from(deployment_spec.as_str()))?;
+                        depoloyment_detail_groups.image.push_str(&image_result);
+
+                        let resources_result = get_resources_from_spec(String::from(deployment_spec.as_str()))?;
+                        depoloyment_detail_groups.resources.push_str(&serde_json::to_string(&resources_result).expect("Failed to serialize to JSON"));    
+
+                        // We really don't care about the metadata section at this point
+                        //depoloyment_detail_groups.metadata.push_str(deployment_metadata.as_str());
+                        /* 
+                        spec contains:
+                            DONE - replicas 
+                            DONE - image
+                            DONE ? - resources - if defined
+                        
+                        */
+                        //depoloyment_detail_groups.spec.push_str(deployment_spec.as_str());
+                        //depoloyment_detail_groups.status.push_str(deployment_status.as_str());
+                    }
+                }
+
+                depolyment_details_per_namespace.deployment_details.push(depoloyment_detail_groups);
+            }
+
+            // put the items into the master wrapper
+            total_deployment_details.total_details.push(depolyment_details_per_namespace);
+        }
+        Ok(total_deployment_details)
+    }
+
+    pub fn get_replicas_from_spec(spec_string: String) -> Result<String, Error> {
+
+        const REGEX_PATTERN: &str = r"(replicas\:\s)(\d+)";
+        let regex_pattern = Regex::new(REGEX_PATTERN).unwrap();
+        
+        if let Some(captures) = regex_pattern.captures(&spec_string) {
+            if let (
+                Some(spec_replicas),
+            ) = (
+                captures.get(2),
+            ) {
+                return Ok(String::from(spec_replicas.as_str().trim()));
+            }
+        }
+
+        Ok(String::from("undefined"))
+    }
+
+    pub fn get_image_from_spec(spec_string: String) -> Result<String, Error> {
+        const REGEX_PATTERN: &str = r"(image\:\s)(.*)";
+        let regex_pattern = Regex::new(REGEX_PATTERN).unwrap();
+        
+        if let Some(captures) = regex_pattern.captures(&spec_string) {
+            if let (
+                Some(spec_image),
+            ) = (
+                captures.get(2),
+            ) {
+                return Ok(String::from(spec_image.as_str().trim()));
+            }
+        }
+
+        Ok(String::from("undefined"))
+    }
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)]
+    pub struct Resources {
+        limits: ResourceLimits,
+        requsts: ResoruceRequests,
+    }
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)]
+    pub struct ResourceLimits {
+        cpu: String,
+        memory: String,
+    }
+
+    #[derive(Debug)]
+    #[derive(Deserialize)]
+    #[derive(Serialize)]
+    pub struct ResoruceRequests {
+        cpu: String,
+        memory: String,
+    }
+
+    pub fn get_resources_from_spec(spec_string: String) -> Result<Resources, Error> {
+
+        const REGEX_PATTERN: &str = r"(resources\:)((.*\n)+)(\s+)(securityContext\:\n)";
+        let regex_pattern = Regex::new(REGEX_PATTERN).unwrap();
+        
+        let mut resource_requests = ResoruceRequests {
+            cpu: String::new(),
+            memory: String::new(),
+        };
+
+        let mut resource_limits = ResourceLimits {
+            cpu: String::new(),
+            memory: String::new(),
+        };
+
+        if let Some(captures) = regex_pattern.captures(&spec_string) {
+            if let (
+                Some(spec_resources),
+            ) = (
+                captures.get(2),
+            ) {
+                const LIMITS_REGEX_PATTERN: &str = r"(limits\:)((.*\n)+)(\s+)(requests)";
+                let limits_regex_pattern = Regex::new(LIMITS_REGEX_PATTERN).unwrap();
+
+                if let Some(limits_captures) = limits_regex_pattern.captures(&spec_resources.as_str()) {
+                    if let (
+                        Some(limits),
+                    ) = (
+                        limits_captures.get(2),
+                    ) {
+                        let limits_memory = get_memory(String::from(limits.as_str()))?;
+                        let limits_cpu = get_cpu(String::from(limits.as_str()))?;
+                        
+                        resource_limits.cpu.push_str(&limits_cpu);
+                        resource_limits.memory.push_str(&limits_memory);
+                    }
+                }
+                
+                const REQUESTS_REGEX_PATTERN: &str = r"(requests\:)((.*\n)+.*)";
+                let requests_regex_pattern = Regex::new(REQUESTS_REGEX_PATTERN).unwrap();
+
+                if let Some(resource_captures) = requests_regex_pattern.captures(&spec_resources.as_str()) {
+                    if let (
+                        Some(requests),
+                    ) = (
+                        resource_captures.get(2),
+                    ) {
+                        let requests_memory = get_memory(String::from(requests.as_str()))?;
+                        let requests_cpu = get_cpu(String::from(requests.as_str()))?;
+
+                        resource_requests.cpu.push_str(&requests_cpu);
+                        resource_requests.memory.push_str(&requests_memory);
+                        
+                    }
+                }
+            }
+        }
+
+        let resources = Resources {
+            limits: resource_limits,
+            requsts: resource_requests,
+        };
+
+        Ok(resources)
+    }
+
+    fn get_memory(input: String) -> Result<String, Error> {
+        
+        const MEMORY_REGEX_PATTERN: &str = r"(memory\:\s)(.*)";
+        let memory_regex_pattern = Regex::new(MEMORY_REGEX_PATTERN).unwrap();
+
+        if let Some(memory_captures) = memory_regex_pattern.captures(&input.as_str()) {
+            if let (
+                Some(memory),
+            ) = (
+                memory_captures.get(2),
+            ) {
+                return Ok(String::from(memory.as_str().trim()));
+            }
+        }
+        Ok(String::from("unalbe to regex out"))
+    }
+
+    fn get_cpu(input: String) -> Result<String, Error> {
+        const CPU_REGEX_PATTERN: &str = r"(cpu\:\s)(.*)";
+        let cpu_regex_pattern = Regex::new(CPU_REGEX_PATTERN).unwrap();
+
+        if let Some(cpu_captures) = cpu_regex_pattern.captures(&input.as_str()) {
+            if let (
+                Some(cpu),
+            ) = (
+                cpu_captures.get(2),
+            ) {
+                return Ok(String::from(cpu.as_str().trim()));
+            }
+        }
+        
+        Ok(String::from("unable to regex out"))
+    }
+
 }

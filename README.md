@@ -3,13 +3,14 @@ This is the start to the cluster reader service that will serve up cluster info 
 
 
 
+### ToDo
+* Update regex to include ? where errors can happen
 
+* Break up all the nesting
 
-### Regex Patterns to use.
+* make functions more consise
 
-* Parse apart the deployment string result: 
+* remove async from processor functions, only external calls
 
-    `(^apiVersion\:\s)(.*)\n(kind\:\s)(Deployment)\n(metadata\:)((.*\n)+)(spec\:)((.*\n)+)(status\:)((.*\n)+.*)`
-
-    This one ends with an extra .* in order to get the last line, not sure if we will need it but this way we have it.
+* Create error types
 
