@@ -482,10 +482,7 @@ pub mod use_case {
         replicas: String,
         image: String,
         kind: String,
-        resources: String,
-        //metadata: String,
-        //spec: String,
-        //status: String,
+        resources: Resources,
     }
 
     #[derive(Debug)]
@@ -524,30 +521,30 @@ pub mod use_case {
                     replicas: String::new(),
                     image: String::new(),
                     kind: String::new(),
-                    resources: String::new(),
-                    //metadata: String::new(),
-                    //spec: String::new(),
-                    //status: String::new()
+                    resources: Resources {
+                        limits: ResourceLimits {
+                            cpu: String::new(),
+                            memory: String::new(),
+                        },
+                        requsts: ResoruceRequests {
+                            cpu: String::new(),
+                            memory: String::new(),
+                        }
+                    },
                 };
 
-                // process the deployment via regex and put the parts into the struct.
                 const REGEX_PATTERN: &str = r"(^apiVersion\:\s)(.*)\n(kind\:\s)(Deployment)\n(metadata\:)((.*\n)+)(spec\:)((.*\n)+)(status\:)((.*\n)+.*)";
-
                 let regex_pattern = Regex::new(REGEX_PATTERN).unwrap();
 
                 if let Some(captures) = regex_pattern.captures(&item.details) {
                     if let (
                         Some(deployment_api_version),
                         Some(deployment_kind),
-                        //Some(deployment_metadata),
                         Some(deployment_spec),
-                        //Some(deployment_status),
                     ) = (
                         captures.get(2),
                         captures.get(4),
-                        //captures.get(6),
                         captures.get(9),
-                        //captures.get(12),
                     ) {
                         depoloyment_detail_groups.api_version.push_str(deployment_api_version.as_str());
                         depoloyment_detail_groups.kind.push_str(deployment_kind.as_str());
@@ -559,26 +556,13 @@ pub mod use_case {
                         depoloyment_detail_groups.image.push_str(&image_result);
 
                         let resources_result = get_resources_from_spec(String::from(deployment_spec.as_str()))?;
-                        depoloyment_detail_groups.resources.push_str(&serde_json::to_string(&resources_result).expect("Failed to serialize to JSON"));    
-
-                        // We really don't care about the metadata section at this point
-                        //depoloyment_detail_groups.metadata.push_str(deployment_metadata.as_str());
-                        /* 
-                        spec contains:
-                            DONE - replicas 
-                            DONE - image
-                            DONE ? - resources - if defined
-                        
-                        */
-                        //depoloyment_detail_groups.spec.push_str(deployment_spec.as_str());
-                        //depoloyment_detail_groups.status.push_str(deployment_status.as_str());
+                        depoloyment_detail_groups.resources = resources_result;    
                     }
                 }
 
                 depolyment_details_per_namespace.deployment_details.push(depoloyment_detail_groups);
             }
 
-            // put the items into the master wrapper
             total_deployment_details.total_details.push(depolyment_details_per_namespace);
         }
         Ok(total_deployment_details)
